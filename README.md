@@ -1,6 +1,4 @@
 # 🩺 Med-RLHF: Reinforcement Learning for Medical Reasoning using LLaVA-7B
-<img width="2404" height="1029" alt="image" src="https://github.com/user-attachments/assets/92a9e9a6-e752-4684-aa47-d6985574e934" />
-- Overview of the project is shown below.
 - Due to privacy and protection of the project with other collaborators, the source code is hidden currently.
 
 ## 📘 Overview
@@ -40,12 +38,4 @@ However, unlike conventional RLHF pipelines, **our reward model and value functi
 ## 🧩 System Design
 
 ### Training Flow
-```mermaid
-flowchart TD
-    A[Medical Prompt / Image] --> B[LLaVA-7B Policy Model]
-    B --> C[Generated Response]
-    C --> D[Reward Model (BioBERT / MedReward / API Evaluator)]
-    D --> E[Reward Signal]
-    E --> F[PPO Optimizer]
-    F --> G[Policy Update]
-    G --> B
+<img width="2404" height="1029" alt="image" src="https://github.com/user-attachments/assets/92a9e9a6-e752-4684-aa47-d6985574e934" />
