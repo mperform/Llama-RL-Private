@@ -1,0 +1,41 @@
+# PMC-VQA SFT Pipeline Requirements
+# For fine-tuning DeepSeek-R1-Distill-Llama-8B on PMC-VQA dataset
+# Python 3.8+ required
+
+# Core ML/DL Frameworks
+torch>=2.1.0,<3.0.0
+transformers>=4.36.0,<5.0.0
+datasets>=2.16.0,<3.0.0
+
+# Training Essentials
+accelerate>=0.25.0,<1.0.0
+peft>=0.7.0,<1.0.0
+bitsandbytes>=0.41.0,<1.0.0
+
+# Data Processing
+pandas>=2.0.0,<3.0.0
+numpy>=1.24.0,<2.0.0
+
+# Utilities
+tqdm>=4.65.0,<5.0.0
+
+# Optional: Monitoring and Logging
+# Uncomment if you want to use these tools
+# tensorboard>=2.15.0
+# wandb>=0.16.0
+
+# Optional: Jupyter Notebook Support
+# Uncomment if you want to run in notebooks
+# jupyter>=1.0.0
+# ipywidgets>=8.0.0
+
+# Additional utilities that may be helpful
+sentencepiece>=0.1.99  # For tokenization (some models need this)
+protobuf>=3.20.0       # Required by some dependencies
+safetensors>=0.4.0     # For efficient model loading
+
+# Note: If you encounter CUDA/cuDNN errors, you may need:
+# - CUDA Toolkit 11.8+ or 12.1+
+# - cuDNN compatible with your CUDA version
+# These are typically installed at the system level, not via pip
+
