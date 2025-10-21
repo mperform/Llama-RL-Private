@@ -55,7 +55,7 @@ def main():
     try:
         preprocessor.run(
             output_dir=output_dir,
-            sample_size=10
+            sample_size=1
         )
         
         # Display examples
@@ -76,7 +76,7 @@ def main():
                 print(f"\nAnswer: {example['answer']}")
                 print(f"\nTokens: {example['num_tokens']}")
                 print(f"\nFormatted Text:")
-                print(f"{example['formatted_text']}")
+                # print(f"{example['formatted_text']}")
         
         print("\n" + "="*70)
         print("✅ TEST PASSED - Preprocessing completed successfully!")

@@ -13,6 +13,8 @@ Date: October 2025
 import os
 import json
 import pandas as pd
+import psutil
+import gc
 from datasets import Dataset, DatasetDict, load_from_disk
 from transformers import AutoTokenizer
 from typing import Dict, List, Optional
@@ -62,6 +64,11 @@ class PMCVQAPreprocessor:
         print(f"Max model length: {self.tokenizer.model_max_length}")
         print(f"BOS token: {self.tokenizer.bos_token}")
         print(f"EOS token: {self.tokenizer.eos_token}")
+    
+    def print_memory_usage(self, stage: str = ""):
+        """Print current memory usage."""
+        memory = psutil.virtual_memory()
+        print(f"Memory {stage}: {memory.percent:.1f}% ({memory.used / 1024**3:.1f}GB / {memory.total / 1024**3:.1f}GB) - Available: {memory.available / 1024**3:.1f}GB")
         
     def format_multiple_choice(self, row: Dict) -> str:
         """Format the multiple choice options."""
@@ -86,9 +93,9 @@ class PMCVQAPreprocessor:
             List of message dictionaries in chat format
         """
         # Extract fields
-        question = row.get('Question', '').strip()
-        answer = row.get('Answer', '').strip()
-        figure_path = row.get('Figure_path', '').strip()
+        question = row.get('Question', '').strip() if row.get('Question') else ''
+        answer = row.get('Answer', '').strip() if row.get('Answer') else ''
+        figure_path = row.get('Figure_path', '').strip() if row.get('Figure_path') else ''
         
         # Build the user prompt
         user_prompt = f"You are a medical expert. Answer the following medical question based on the image."
@@ -158,7 +165,7 @@ class PMCVQAPreprocessor:
         # Tokenize
         tokenized = self.tokenizer(
             texts,
-            padding='max_length',
+            padding=False,  # Don't pad during tokenization
             truncation=True,
             max_length=self.max_length,
             return_tensors=None  # Return lists, not tensors
@@ -169,45 +176,70 @@ class PMCVQAPreprocessor:
         
         return tokenized
     
-    def preprocess_dataset(self, dataset: Dataset) -> Dataset:
+    def preprocess_dataset(self, dataset: Dataset, batch_size: int = 5000) -> Dataset:
         """
-        Preprocess the entire dataset.
+        Preprocess the entire dataset in memory-efficient batches.
         
         Args:
             dataset: HuggingFace Dataset object
+            batch_size: Number of examples to process at once
             
         Returns:
             Preprocessed dataset with tokenized inputs
         """
-        print(f"\nPreprocessing {len(dataset)} examples...")
+        print(f"\nPreprocessing {len(dataset)} examples in batches of {batch_size}...")
+        self.print_memory_usage("at start")
         
-        # Convert to list of dictionaries for processing
-        examples = []
-        for idx in tqdm(range(len(dataset)), desc="Creating conversations"):
-            row = dataset[idx]
-            conversation = self.create_conversation(row)
-            formatted_text = self.apply_chat_template(conversation)
-            examples.append({
-                'text': formatted_text,
-                'question': row.get('Question', ''),
-                'answer': row.get('Answer', ''),
-                'figure_path': row.get('Figure_path', '')
-            })
+        # Process in batches to avoid memory issues
+        all_tokenized_data = []
+        total_batches = (len(dataset) + batch_size - 1) // batch_size
         
-        # Create new dataset
-        processed_dataset = Dataset.from_list(examples)
+        for batch_idx in range(total_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(dataset))
+            
+            print(f"\nProcessing batch {batch_idx + 1}/{total_batches} (examples {start_idx}-{end_idx-1})...")
+            self.print_memory_usage(f"before batch {batch_idx + 1}")
+            
+            # Process current batch
+            batch_examples = []
+            for idx in tqdm(range(start_idx, end_idx), desc=f"Batch {batch_idx + 1}"):
+                row = dataset[idx]
+                conversation = self.create_conversation(row)
+                formatted_text = self.apply_chat_template(conversation)
+                batch_examples.append({
+                    'text': formatted_text,
+                    'question': row.get('Question', ''),
+                    'answer': row.get('Answer', ''),
+                    'figure_path': row.get('Figure_path', '')
+                })
+            
+            # Tokenize current batch
+            print(f"Tokenizing batch {batch_idx + 1}...")
+            batch_dataset = Dataset.from_list(batch_examples)
+            tokenized_batch = batch_dataset.map(
+                self.tokenize_function,
+                batched=True,
+                batch_size=1000,
+                remove_columns=['text'],
+                desc=f"Tokenizing batch {batch_idx + 1}"
+            )
+            
+            # Add to results
+            all_tokenized_data.extend([dict(example) for example in tokenized_batch])
+            
+            # Clean up memory
+            del batch_examples, batch_dataset, tokenized_batch
+            gc.collect()
+            
+            self.print_memory_usage(f"after batch {batch_idx + 1}")
         
-        # Tokenize
-        print("\nTokenizing dataset...")
-        tokenized_dataset = processed_dataset.map(
-            self.tokenize_function,
-            batched=True,
-            batch_size=1000,
-            remove_columns=['text'],  # Remove text column after tokenization
-            desc="Tokenizing"
-        )
+        # Create final dataset
+        print(f"\nCreating final dataset from {len(all_tokenized_data)} examples...")
+        final_dataset = Dataset.from_list(all_tokenized_data)
         
-        return tokenized_dataset
+        self.print_memory_usage("at end")
+        return final_dataset
     
     def load_dataset(self) -> DatasetDict:
         """Load the PMC-VQA dataset from disk or CSV."""
