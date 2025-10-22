@@ -176,7 +176,7 @@ class PMCVQAPreprocessor:
         
         return tokenized
     
-    def preprocess_dataset(self, dataset: Dataset, batch_size: int = 5000) -> Dataset:
+    def preprocess_dataset(self, dataset: Dataset, batch_size: int = 8000) -> Dataset:
         """
         Preprocess the entire dataset in memory-efficient batches.
         
@@ -347,19 +347,22 @@ def main():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/DeepSeek-R1-Distill-Llama-8B",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/DeepSeek-R1-Distill-Llama-8B",
+        default=r'D:\Github\Llama-RL-Private\DeepSeek-R1-Distill-Llama-8B',
         help="Path to the DeepSeek-R1-Distill-Llama-8B model directory"
     )
     parser.add_argument(
         "--dataset_path",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA",
+        default=r'D:\Github\Llama-RL-Private\PMC-VQA',
         help="Path to the PMC-VQA dataset directory"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-Processed",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-Processed",
+        default=r'D:\Github\Llama-RL-Private\PMC-VQA-Processed',
         help="Output directory for preprocessed dataset"
     )
     parser.add_argument(

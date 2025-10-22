@@ -205,7 +205,7 @@ training_args = TrainingArguments(
     eval_steps=500,
     save_total_limit=2,
     fp16=True,  # or bf16=True for better precision
-    evaluation_strategy="steps",
+    eval_strategy="steps",
     load_best_model_at_end=True,
 )
 

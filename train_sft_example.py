@@ -21,7 +21,6 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling,
 )
 from peft import LoraConfig, get_peft_model, TaskType, prepare_model_for_kbit_training
 import logging
@@ -126,24 +125,24 @@ def create_training_args(output_dir, num_epochs=3, batch_size=4, grad_accum=8, l
         
         # Logging and saving
         logging_steps=10,
-        save_steps=100,
-        eval_steps=100,
+        save_steps=1000,
+        eval_steps=1000,  # Evaluate every 1000 steps instead of 100
         save_total_limit=3,
         
         # Evaluation and best model
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         
         # Mixed precision
-        fp16=False,
-        bf16=True,  # Use bfloat16 for better stability
+        fp16=True,  # Use fp16 for mixed precision training
+        bf16=False,
         
         # Other settings
         report_to="none",  # Change to "wandb" or "tensorboard" if you want logging
-        remove_unused_columns=False,
-        dataloader_num_workers=4,
-        dataloader_pin_memory=True,
+        remove_unused_columns=True,  # Remove text columns, keep only tensors
+        dataloader_num_workers=0,  # Use 0 on Windows to avoid multiprocessing issues
+        dataloader_pin_memory=False,  # Disable pin_memory if no accelerator
     )
 
 
@@ -153,24 +152,63 @@ def compute_metrics(eval_pred):
     return {}
 
 
+class DataCollatorForSFT:
+    """Custom data collator that pads pre-tokenized sequences with labels."""
+    def __init__(self, tokenizer, padding=True):
+        self.tokenizer = tokenizer
+        self.padding = padding
+    
+    def __call__(self, features):
+        # Extract input_ids, attention_mask, and labels from features
+        batch = {}
+        
+        # Get max length in batch
+        max_length = max(len(f['input_ids']) for f in features)
+        
+        # Initialize lists
+        input_ids = []
+        attention_mask = []
+        labels = []
+        
+        for f in features:
+            # Pad input_ids and attention_mask
+            seq_len = len(f['input_ids'])
+            pad_len = max_length - seq_len
+            
+            input_ids.append(f['input_ids'] + [self.tokenizer.pad_token_id] * pad_len)
+            attention_mask.append(f['attention_mask'] + [0] * pad_len)
+            
+            # Pad labels with -100 (ignore index)
+            labels.append(f['labels'] + [-100] * pad_len)
+        
+        batch['input_ids'] = torch.tensor(input_ids, dtype=torch.long)
+        batch['attention_mask'] = torch.tensor(attention_mask, dtype=torch.long)
+        batch['labels'] = torch.tensor(labels, dtype=torch.long)
+        
+        return batch
+
+
 def main():
     parser = argparse.ArgumentParser(description="SFT training for DeepSeek-R1-Distill-Llama-8B on PMC-VQA")
     parser.add_argument(
         "--model_path",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/DeepSeek-R1-Distill-Llama-8B",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/DeepSeek-R1-Distill-Llama-8B",
+        default=r'D:\Github\Llama-RL-Private\DeepSeek-R1-Distill-Llama-8B',
         help="Path to the model directory"
     )
     parser.add_argument(
         "--dataset_path",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-Processed",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-Processed",
+        default=r'D:\Github\Llama-RL-Private\PMC-VQA-Processed',
         help="Path to the preprocessed dataset"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-SFT-Output",
+        # default="/scratch/ece598f25s002_class_root/ece598f25s002_class/mperform/PMC-VQA-SFT-Output",
+        default=r'D:\Github\Llama-RL-Private\PMC-VQA-SFT-Output',
         help="Output directory for the fine-tuned model"
     )
     parser.add_argument(
@@ -229,8 +267,12 @@ def main():
         dataset['train'] = dataset['train'].select(range(min(args.max_samples, len(dataset['train']))))
         dataset['test'] = dataset['test'].select(range(min(args.max_samples // 10, len(dataset['test']))))
     
+    # Create a smaller eval dataset for faster evaluation (use 1000 samples)
+    eval_dataset = dataset['test'].select(range(min(1000, len(dataset['test']))))
+    
     logger.info(f"Train samples: {len(dataset['train'])}")
     logger.info(f"Test samples: {len(dataset['test'])}")
+    logger.info(f"Eval samples (for speed): {len(eval_dataset)}")
     
     # Setup model and tokenizer
     model, tokenizer = setup_model_and_tokenizer(
@@ -240,9 +282,8 @@ def main():
     )
     
     # Create data collator
-    data_collator = DataCollatorForLanguageModeling(
+    data_collator = DataCollatorForSFT(
         tokenizer=tokenizer,
-        mlm=False,  # Causal LM, not masked LM
     )
     
     # Create training arguments
@@ -260,7 +301,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=dataset['train'],
-        eval_dataset=dataset['test'],
+        eval_dataset=eval_dataset,  # Use smaller eval dataset for speed
         data_collator=data_collator,
     )
     
